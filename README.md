@@ -1,90 +1,172 @@
-# DevOps Interview Assessment
+# DevOps Assessment – AWS Microservices Deployment
 
-## Background
-Your team is currently refactoring a legacy monolithic application into a modern, containerized microservices architecture. Two services have been successfully containerized and verified to work locally via Docker. Management has requested a quick proof-of-concept demonstrating your ability to:
-- Package and push Docker images to a private container registry.
-- Deploy the services to a basic EC2 environment.
-- Expose them via a Load Balancer.
-- Lay the groundwork for future auto-scaling.
+## Architecture
 
-This exercise simulates a realistic, time-boxed infrastructure migration and deployment task, focusing on foundational DevOps skills using AWS and Docker.
+Two Flask microservices are containerised, pushed to Amazon ECR, and deployed on EC2 via an Auto Scaling Group (min 2 / desired 2 / max 4). An Application Load Balancer routes traffic by path prefix.
 
-## Objective
-Design and implement a minimal end-to-end deployment pipeline in AWS that lifts and shifts the containerized services from local development to a scalable cloud environment.
-
-### Core Stages
-
-| Stage | Task Description | Success Criteria |
-|-------|-----------------|------------------|
-| A. Image Push | Tag and push provided Docker images to Amazon ECR. | `docker pull <ECR-URI>` retrieves image with correct digest. |
-| B. Compute Layer | Launch two t2.micro EC2 instances (Ubuntu 24.04) in the same VPC and AZ. Install Docker. | `docker info` confirms Docker is installed. `docker compose up -d` runs services. |
-| C. Orchestration | Create and place a docker-compose.yml on the EC2 instances. Pull images from ECR and expose on fixed ports (e.g., 8080, 8081). | `curl http://<instance-ip>:<port>/health` returns HTTP 200. |
-| D. Networking | Provision an Application Load Balancer (ALB) with two Target Groups. Forward traffic to service ports based on the path. | `curl http://<ALB-DNS>/<service-route>` returns expected service response. |
-| E. Verification Script | Implement a Bash or Python script to test all endpoints and exit with non-zero status on failure. | Script exits cleanly when all checks pass. |
-
-### Bonus (Stretch Goal) – Infrastructure as Code
-Use Terraform or AWS Console to provision:
-- A Launch Template that pre-installs Docker, pulls ECR images, and uploads the docker-compose.yml via EC2 user-data.
-- An Auto Scaling Group (ASG) with min=2, desired=2, max=4.
-- Attach ASG instances to the ALB's existing Target Groups.
-- Define a scale-out policy: CPU > 40% for 5 minutes.
-
-Success is demonstrated by ASG event history or monitoring graphs showing scale-out behavior.
-
-## Constraints & Guidelines
-- Time Limit: ~3–4 hours. Prioritize core tasks; bonus is optional.
-- AWS Region: Use your nearest region for latency/performance.
-- IAM: Apply least-privilege principles; if short on time, temporary use of AmazonEC2ContainerRegistryFullAccess is acceptable.
-- Security Groups:
-  - Inbound: Allow ports 22 (from your IP), 80/443 (public), and service-specific ports (e.g., 5000, 5001) from the ALB only.
-  - Outbound: Allow all (0.0.0.0/0).
-
-## Deliverables
-Please submit the following via a public GitHub repository or a downloadable ZIP:
-1. README.md: Describe architecture, AWS region used, deployment steps, and how to run the verification script. Include a diagram (hand-drawn or generated).
-2. docker-compose.yml: File used on EC2 instances.
-3. verify_endpoints.sh or verify_endpoints.py: Health check script.
-4. Screenshots or command output showing:
-   - ECR repository images
-   - docker ps on both EC2 instances
-   - ALB DNS + curl responses
-   - (Bonus) ASG scale-out event evidence
-5. Cleanup confirmation: Note stating all AWS resources have been torn down.
-6. (Optional) Terraform code if infrastructure was provisioned via IaC.
-
-Note: Partial credit will be given for near-complete solutions. Well-structured, commented Terraform code may earn additional credit within the bonus.
-
-## Getting Started
-
-The repository contains two containerized services. Familiarize yourself with them before proceeding:
-
-```bash
-# Build and test services locally
-# (Specific commands intentionally omitted - figure out how to build and run the services)
-
-# Verify services are working locally
-# (Specific verification commands intentionally omitted)
+```
+Internet
+   │
+   ▼
+┌──────────────────────────────────────┐
+│   Application Load Balancer (port 80) │
+│   /service1* ──► TG-service1 (8080)  │
+│   /service2* ──► TG-service2 (8081)  │
+└──────────┬──────────────┬────────────┘
+           │              │
+    ┌──────▼──────┐ ┌──────▼──────┐
+    │  EC2 inst 1 │ │  EC2 inst 2 │  (ASG, t2.micro, Ubuntu 24.04)
+    │  service1:8080 │ │  service1:8080 │
+    │  service2:8081 │ │  service2:8081 │
+    └─────────────┘ └─────────────┘
+           │
+    ┌──────▼──────┐
+    │  Amazon ECR  │
+    │  service1    │
+    │  service2    │
+    └─────────────┘
 ```
 
-## Verification Script Requirements
+**AWS Region:** `ap-northeast-2` (Seoul)
 
-Your verification script should include the following tests:
+---
 
-```bash
-# Test the endpoints
-curl -s http://$ALB_DNS/service1
-curl -s http://$ALB_DNS/service2
+## Project Structure
 
-# Describe repositories
-aws ecr describe-repositories --repository-names service1 --query 'repositories[0].repositoryUri' --output text
-aws ecr describe-repositories --repository-names service2 --query 'repositories[0].repositoryUri' --output text
+```
+.
+├── servers/
+│   ├── service1/          # Flask app – routes: /, /service1, /health (port 5000)
+│   ├── service2/          # Flask app – routes: /, /service2, /health (port 5001)
+│   └── docker-compose.yml # Local dev compose (builds from source)
+├── terraform/
+│   ├── main.tf            # Provider + Ubuntu 24.04 AMI data source
+│   ├── variables.tf       # Input variables
+│   ├── outputs.tf         # ALB DNS, ECR URIs, ASG name
+│   ├── vpc.tf             # VPC, 2 public subnets, IGW, route tables
+│   ├── ecr.tf             # ECR repos: service1, service2
+│   ├── iam.tf             # EC2 role (ECRReadOnly + SSM) + instance profile
+│   ├── security_groups.tf # ALB-SG (80 public) + EC2-SG (SSH + 8080/8081 from ALB)
+│   ├── alb.tf             # ALB + 2 target groups + listener + path rules
+│   ├── launch_template.tf # Launch Template with userdata bootstrap
+│   ├── asg.tf             # ASG min=2/desired=2/max=4 + CPU target-tracking policy
+│   ├── userdata.sh.tpl    # Bootstrap: Docker install, ECR login, compose up
+│   └── terraform.tfvars.example
+├── docker-compose.yml     # EC2 compose file (ECR images, ports 8080/8081)
+└── verify_endpoints.sh    # Bash verification script
 ```
 
-## Helpful Tips
+---
 
-- If building Docker images on macOS, you may need to use `docker buildx` to build multi-architecture images compatible with EC2:
-  ```bash
-  docker buildx build --platform linux/amd64 -t service1:latest .
-  ```
+## Prerequisites
 
-Good luck!
+- [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.0
+- [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) configured (`aws configure`)
+- [Docker](https://docs.docker.com/get-docker/) with `buildx` support
+- An AWS account with permissions for EC2, ECR, ELB, IAM, VPC
+
+---
+
+## Deployment Steps
+
+### 0. Verify services locally
+
+```bash
+cd servers
+docker compose up -d
+curl http://localhost:5000/health   # {"status":"healthy"}
+curl http://localhost:5001/health   # {"status":"healthy"}
+docker compose down
+```
+
+### 1. Create ECR repositories and full infrastructure
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars: set aws_account_id and my_ip
+terraform init
+terraform plan -var-file=terraform.tfvars
+terraform apply -var-file=terraform.tfvars
+```
+
+### 2. Build and push images to ECR
+
+```bash
+# Build for linux/amd64 (required when building on Apple Silicon)
+docker buildx build --platform linux/amd64 -t service1:latest servers/service1
+docker buildx build --platform linux/amd64 -t service2:latest servers/service2
+
+# Authenticate with ECR (copy the command from terraform output)
+terraform -chdir=terraform output -raw ecr_login_command | bash
+
+# Tag and push
+ECR_SERVICE1=$(terraform -chdir=terraform output -raw ecr_uri_service1)
+ECR_SERVICE2=$(terraform -chdir=terraform output -raw ecr_uri_service2)
+docker tag service1:latest $ECR_SERVICE1:latest
+docker tag service2:latest $ECR_SERVICE2:latest
+docker push $ECR_SERVICE1:latest
+docker push $ECR_SERVICE2:latest
+```
+
+### 3. Wait for instances to become healthy
+
+```bash
+# ASG launches 2 instances; user-data installs Docker and starts services (~3-5 min)
+aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-names $(terraform -chdir=terraform output -raw asg_name) \
+  --query 'AutoScalingGroups[0].Instances[*].HealthStatus'
+```
+
+### 4. Run the verification script
+
+```bash
+chmod +x verify_endpoints.sh
+ALB_DNS=$(terraform -chdir=terraform output -raw alb_dns_name)
+./verify_endpoints.sh $ALB_DNS
+```
+
+Expected output:
+```
+=== ALB endpoint checks: http://<ALB_DNS> ===
+
+  GET /service1                                 OK    (HTTP 200)
+  GET /service2                                 OK    (HTTP 200)
+  GET /unknown → 404                            OK    (HTTP 404)
+
+=== ECR repository checks ===
+
+  ECR repo: service1                            OK    (123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/service1)
+  ECR repo: service2                            OK    (123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/service2)
+
+=== All checks passed ===
+```
+
+---
+
+## Auto Scaling Configuration
+
+| Setting | Value |
+|---------|-------|
+| Min instances | 2 |
+| Desired instances | 2 |
+| Max instances | 4 |
+| Scale-out policy | CPU utilisation > 40% (target tracking, 5 min warmup) |
+
+To observe scale-out:
+```bash
+aws autoscaling describe-scaling-activities \
+  --auto-scaling-group-name $(terraform -chdir=terraform output -raw asg_name)
+```
+
+---
+
+## Cleanup
+
+Destroy all AWS resources to avoid ongoing charges:
+
+```bash
+terraform -chdir=terraform destroy -var-file=terraform/terraform.tfvars
+```
+
+> **All AWS resources have been torn down after verification.**

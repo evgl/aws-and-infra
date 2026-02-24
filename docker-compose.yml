@@ -1,0 +1,20 @@
+# docker-compose.yml — used on EC2 instances (images pulled from ECR)
+# ECR_URI_SERVICE1 and ECR_URI_SERVICE2 are injected by the Terraform userdata template.
+version: "3.8"
+
+services:
+  service1:
+    image: ${ECR_URI_SERVICE1}:latest
+    ports:
+      - "8080:5000"
+    environment:
+      - FLASK_ENV=production
+    restart: unless-stopped
+
+  service2:
+    image: ${ECR_URI_SERVICE2}:latest
+    ports:
+      - "8081:5001"
+    environment:
+      - FLASK_ENV=production
+    restart: unless-stopped

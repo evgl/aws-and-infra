@@ -1,3 +1,11 @@
 .claude/
 CLAUDE.MD
 *.DS_Store
+
+# Terraform — never commit state, vars with secrets, or provider cache
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfplan
