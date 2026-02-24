@@ -4,7 +4,7 @@
 aws_region     = "ap-northeast-2"
 aws_account_id = "123456789012"
 
-project_name = "phynixlab"
+project_name = "microservice"
 
 # Restrict SSH access to your IP: run `curl ifconfig.me` to find it
 my_ip = "1.2.3.4/32"

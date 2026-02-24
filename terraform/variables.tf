@@ -12,7 +12,7 @@ variable "aws_account_id" {
 variable "project_name" {
   description = "Project name prefix for all resources"
   type        = string
-  default     = "phynixlab"
+  default     = "microservice"
 }
 
 variable "vpc_cidr" {
