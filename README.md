@@ -1,5 +1,15 @@
 # DevOps Assessment – AWS Microservices Deployment
 
+> **Note on live testing**
+>
+> The AWS account provided for this assessment does not have sufficient IAM permissions to create an IAM user, generate access keys, or call `iam:ListUsers`. As a result, it was not possible to configure AWS CLI credentials and run `terraform apply` against a live account.
+>
+> All Terraform code has been written and validated locally (`terraform init`, `terraform fmt`, `terraform validate`, `tflint` — all pass with zero errors). The implementation is based on the assumption that a properly privileged AWS account is available. The logic, resource definitions, and wiring are correct and should deploy successfully given the right credentials.
+>
+> ![IAM ListUsers permission denied](listUsers.png)
+
+
+
 ## Architecture
 
 Two Flask microservices are containerised, pushed to Amazon ECR, and deployed on EC2 via an Auto Scaling Group (min 2 / desired 2 / max 4). An Application Load Balancer routes traffic by path prefix.
