@@ -2,7 +2,7 @@
 # terraform.tfvars is gitignored — never commit real account IDs or IPs.
 
 aws_region     = "ap-northeast-2"
-aws_account_id = "123456789012"
+aws_account_id = ""
 
 project_name = "microservice"
 
